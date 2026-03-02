@@ -26,24 +26,21 @@ const upload = multer({ storage: storage });
 
 // --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
 const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  host: 'smtp.gmail.com',
+  host: "smtp.gmail.com",
   port: 587,
-  secure: false,
+  secure: false, // TLS
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // Forzamos a que ignore IPv6 a nivel de socket
+  // 🔥 Forzamos IPv4 y desactivamos la verificación estricta de DNS
   family: 4, 
-  connectionTimeout: 20000, // Le damos más tiempo (20 seg)
-  greetingTimeout: 20000,
   tls: {
-    // Esto es clave para que no rechace la conexión en la nube
     rejectUnauthorized: false,
-    minVersion: "TLSv1.2",
     servername: 'smtp.gmail.com'
-  }
+  },
+  debug: true, // Esto nos dará más info en los logs si falla
+  logger: true
 });
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
