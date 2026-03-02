@@ -33,7 +33,7 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // 🔥 ESTA ES LA CLAVE: Forzamos a que NO use IPv6
+  // 🔥 ESTA ES LA CLAVE: Forzamos el uso de IPv4 para evitar el error de red
   family: 4, 
   tls: {
     rejectUnauthorized: false
