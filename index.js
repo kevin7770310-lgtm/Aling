@@ -42,7 +42,13 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
 const Product = sequelize.define('Product', {
   name: { type: DataTypes.STRING, allowNull: false },
   factoryPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
-  imageUrl: { type: DataTypes.STRING, allowNull: false }
+  imageUrl: { type: DataTypes.STRING, allowNull: false },
+  // 🔥 Agregamos weightKg para que la base de datos no rechace el registro
+  weightKg: { 
+    type: DataTypes.DECIMAL(10, 2), 
+    allowNull: true, 
+    defaultValue: 0.0 // Esto evita el error de "not-null constraint"
+  }
 });
 
 sequelize.sync().then(() => console.log('Base de datos sincronizada'));
