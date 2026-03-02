@@ -24,17 +24,19 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- CONFIGURACIÓN DE CORREOS (NODEMAILER ACTUALIZADA) ---
+// --- CONFIGURACIÓN DE CORREOS (NODEMAILER FORZANDO IPv4) ---
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 587,
-  secure: false, // true para puerto 465, false para otros puertos
+  secure: false, 
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // 🔥 ESTA ES LA CLAVE: Forzamos a que NO use IPv6
+  family: 4, 
   tls: {
-    rejectUnauthorized: false // Esto ayuda a evitar bloqueos en servidores en la nube
+    rejectUnauthorized: false
   }
 });
 
