@@ -24,20 +24,25 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- CONFIGURACIÓN DE CORREOS (SOLUCIÓN IP DIRECTA) ---
+// --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
 const transporter = nodemailer.createTransport({
-  // Usamos la IP directa de Gmail para forzar IPv4 y evitar el error ENETUNREACH
-  host: "74.125.134.108", 
+  service: 'gmail',
+  host: 'smtp.gmail.com',
   port: 587,
-  secure: false, 
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
+  // Forzamos a que ignore IPv6 a nivel de socket
+  family: 4, 
+  connectionTimeout: 20000, // Le damos más tiempo (20 seg)
+  greetingTimeout: 20000,
   tls: {
-    // Es MUY importante esto cuando usamos la IP directa
+    // Esto es clave para que no rechace la conexión en la nube
     rejectUnauthorized: false,
-    servername: 'smtp.gmail.com' 
+    minVersion: "TLSv1.2",
+    servername: 'smtp.gmail.com'
   }
 });
 
