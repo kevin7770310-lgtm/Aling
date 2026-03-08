@@ -27,20 +27,16 @@ const upload = multer({ storage: storage });
 // --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 587,
-  secure: false, // TLS
+  port: 465, // Cambiamos a 465 que suele ser más estable en Render
+  secure: true, // true para puerto 465
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // 🔥 Forzamos IPv4 y desactivamos la verificación estricta de DNS
-  family: 4, 
-  tls: {
-    rejectUnauthorized: false,
-    servername: 'smtp.gmail.com'
-  },
-  debug: true, // Esto nos dará más info en los logs si falla
-  logger: true
+  // 🚀 ESTO ES LO QUE SOLUCIONA TU ERROR:
+  connectionTimeout: 10000, 
+  greetingTimeout: 10000,
+  socketTimeout: 10000,
 });
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
