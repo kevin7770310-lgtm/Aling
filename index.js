@@ -27,16 +27,19 @@ const upload = multer({ storage: storage });
 // --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
-  port: 465, // Cambiamos a 465 que suele ser más estable en Render
-  secure: true, // true para puerto 465
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // 🚀 ESTO ES LO QUE SOLUCIONA TU ERROR:
-  connectionTimeout: 10000, 
+  // 💡 ESTO OBLIGA A USAR IPV4 Y EVITA EL "ENETUNREACH"
+  connectionTimeout: 10000,
   greetingTimeout: 10000,
   socketTimeout: 10000,
+  dnsTimeout: 10000,
+  // Forzar IPv4
+  family: 4 
 });
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
