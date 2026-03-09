@@ -121,33 +121,26 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // Checkout y envío de correo
 app.post('/api/checkout', async (req, res) => {
-  const { email, totalAmount } = req.body;
   try {
+    const { email, totalAmount } = req.body;
+
     const mailOptions = {
-      from: `"Aling Mayorista" <${process.env.EMAIL_USER}>`,
+      from: process.env.EMAIL_USER,
       to: email,
-      subject: 'Confirmación de Pedido - Aling Mayorista',
-      html: `
-        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333; max-width: 600px; border: 1px solid #eee;">
-          <h2 style="color: #FF5722; text-align: center;">¡Gracias por tu compra!</h2>
-          <p>Hola,</p>
-          <p>Hemos recibido tu pedido correctamente en <strong>Aling Mayorista</strong>.</p>
-          <hr style="border: 0; border-top: 1px solid #eee;">
-          <p style="font-size: 18px;"><strong>Resumen del Total:</strong> <span style="color: #FF5722;">$${totalAmount}</span></p>
-          <hr style="border: 0; border-top: 1px solid #eee;">
-          <p>Nuestro equipo se pondrá en contacto contigo pronto para coordinar el pago y el envío.</p>
-          <br>
-          <p>Saludos cordiales,</p>
-          <p><strong>El equipo de Aling</strong></p>
-        </div>
-      `
+      subject: 'Factura de Compra - Aling Mayorista',
+      text: `Gracias por tu compra. Total: $${totalAmount}`
     };
 
+    // Usar await para que el servidor espere el resultado antes de responder
     await transporter.sendMail(mailOptions);
-    res.json({ message: 'Checkout exitoso y correo enviado' });
+    
+    // 🚀 ESTO QUITA EL "CARGANDO" EN FLUTTER
+    return res.status(200).json({ message: 'Pedido exitoso y correo enviado' });
+
   } catch (error) {
-    console.error('❌ Error enviando correo:', error);
-    res.status(500).json({ error: 'Error al procesar el pago o enviar correo' });
+    console.error("❌ Error enviando correo:", error);
+    // 🚀 ESTO MUESTRA EL ERROR EN FLUTTER EN LUGAR DE QUEDARSE CARGANDO
+    return res.status(500).json({ error: 'Error al procesar el envío de factura' });
   }
 });
 
