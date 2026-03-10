@@ -11,6 +11,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// --- CONFIGURACIÓN DE CLOUDINARY ---
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -25,6 +26,7 @@ const upload = multer({ storage: storage });
 
 const resend = new Resend('re_PhirtQEh_6B4Hf96RvoMT6LVBeWjNT4Sa');
 
+// --- CONEXIÓN A LA BASE DE DATOS ---
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
@@ -36,41 +38,86 @@ const Product = sequelize.define('Product', {
   imageUrl: { type: DataTypes.STRING, allowNull: false },
   description: { type: DataTypes.TEXT, allowNull: true },
   sellerEmail: { type: DataTypes.STRING, allowNull: true },
-  category: { type: DataTypes.STRING, defaultValue: 'Otros' } // 🚀 NUEVO CAMPO
+  category: { type: DataTypes.STRING, defaultValue: 'Otros' } 
 });
 
-// ⚠️ ATENCIÓN KEVIN: 
-// Cambia 'alter: true' por 'force: true' SOLO UNA VEZ si el error persiste para limpiar la tabla.
-// Luego de que funcione, regrésalo a 'alter: true'.
 sequelize.sync({ alter: true }) 
-  .then(() => console.log('✅ Base de datos lista'))
+  .then(() => console.log('✅ Base de datos sincronizada'))
   .catch(err => console.error('❌ Error DB:', err));
 
+// --- RUTAS DE LA API ---
+
+// 1. Obtener todos los productos
 app.get('/api/products', async (req, res) => {
   try {
     const products = await Product.findAll({ order: [['createdAt', 'DESC']] });
     res.json(products);
   } catch (error) {
-    res.status(500).json({ error: 'Error interno' });
+    res.status(500).json({ error: 'Error al obtener productos' });
   }
 });
 
+// 2. Crear producto (Marketplace)
 app.post('/api/products', upload.single('image'), async (req, res) => {
   try {
-    const { name, factoryPrice, description, sellerEmail } = req.body;
+    const { name, factoryPrice, description, sellerEmail, category } = req.body;
     const newProduct = await Product.create({
       name,
       factoryPrice,
       description,
+      category: category || 'Otros',
       sellerEmail: sellerEmail || 'admin@aling.com',
       imageUrl: req.file ? req.file.path : 'https://via.placeholder.com/300'
     });
     res.status(201).json(newProduct);
   } catch (error) {
-    res.status(500).json({ error: 'Error al crear' });
+    console.error('Error al crear:', error);
+    res.status(500).json({ error: 'Error interno' });
   }
 });
 
+// 3. Actualizar producto (CON CATEGORÍA Y FIX 404)
+app.put('/api/products/:id', async (req, res) => {
+  try {
+    const { name, factoryPrice, description, category } = req.body;
+    
+    // Buscamos si el producto existe
+    const product = await Product.findByPk(req.params.id);
+    
+    if (!product) {
+      return res.status(404).json({ error: 'Producto no encontrado' });
+    }
+
+    // Actualizamos los campos
+    await product.update({
+      name: name || product.name,
+      factoryPrice: factoryPrice || product.factoryPrice,
+      description: description || product.description,
+      category: category || product.category // 🚀 IMPORTANTE: Actualiza la categoría
+    });
+
+    res.json({ message: '✅ Producto actualizado con éxito', product });
+  } catch (error) {
+    console.error('❌ Error al actualizar:', error);
+    res.status(500).json({ error: 'Error interno al actualizar' });
+  }
+});
+
+// 4. Eliminar producto
+app.delete('/api/products/:id', async (req, res) => {
+  try {
+    const deleted = await Product.destroy({ where: { id: req.params.id } });
+    if (deleted) {
+      res.json({ message: 'Eliminado correctamente' });
+    } else {
+      res.status(404).json({ error: 'No encontrado' });
+    }
+  } catch (error) {
+    res.status(500).json({ error: 'Error al eliminar' });
+  }
+});
+
+// 5. Checkout y Factura
 app.post('/api/checkout', async (req, res) => {
   const { email, totalAmount, address } = req.body; 
   try {
@@ -82,9 +129,9 @@ app.post('/api/checkout', async (req, res) => {
     });
     res.status(200).json({ message: 'Enviado' });
   } catch (error) {
-    res.status(500).json({ error: 'Error Resend' });
+    res.status(500).json({ error: 'Error al enviar factura' });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Puerto ${PORT}`));
+app.listen(PORT, () => console.log(`🚀 Servidor Aling corriendo en puerto ${PORT}`));
