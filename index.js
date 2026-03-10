@@ -28,12 +28,12 @@ const upload = multer({ storage: storage });
 const transporter = nodemailer.createTransport({
   host: "smtp.gmail.com",
   port: 465,
-  secure: true,
+  secure: true, // true para puerto 465
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // 🚀 ESTO OBLIGA A USAR IPV4 Y ELIMINA EL ERROR ENETUNREACH
+  // 🚀 ESTO ELIMINA EL ERROR ENETUNREACH AL FORZAR IPV4
   family: 4, 
   connectionTimeout: 20000,
   greetingTimeout: 20000,
@@ -119,28 +119,21 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // Checkout y envío de correo
 app.post('/api/checkout', async (req, res) => {
+  const { email, totalAmount } = req.body;
   try {
-    const { email, totalAmount } = req.body;
-
     const mailOptions = {
-      from: process.env.EMAIL_USER,
+      from: `"Aling Mayorista" <${process.env.EMAIL_USER}>`,
       to: email,
       subject: 'Factura de Compra - Aling Mayorista',
-      html: `<h1>Gracias por tu compra</h1><p>Total: <b>$${totalAmount}</b></p>`
+      html: `<h1>¡Gracias por tu compra!</h1><p>Total: <b>$${totalAmount}</b></p>`
     };
 
-    // Intentamos enviar el correo
     await transporter.sendMail(mailOptions);
-    
-    // Si funciona, enviamos éxito
-    return res.status(200).json({ message: 'Pedido procesado con éxito' });
-
+    return res.status(200).json({ message: 'Pedido exitoso' });
   } catch (error) {
-    // Si falla el correo, imprimimos el error en el log de Render
-    console.error("❌ Error en el envío de factura:", error);
-    
-    // ENVIAMOS ERROR AL FRONTEND PARA QUE NO SE QUEDE CARGANDO
-    return res.status(500).json({ error: 'Error interno al enviar la factura' });
+    console.error("❌ Error enviando factura:", error);
+    // 🚀 Esto evita el "Cargando" infinito en Flutter
+    return res.status(500).json({ error: 'No se pudo enviar la factura' });
   }
 });
 
