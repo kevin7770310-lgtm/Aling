@@ -8,10 +8,11 @@ const multer = require('multer');
 const { Resend } = require('resend');
 
 const app = express();
-app.use(cors());
+
+// 🚀 1. CORS CONFIGURADO PARA TRABAJO REAL
+app.use(cors()); 
 app.use(express.json());
 
-// --- CONFIGURACIÓN DE CLOUDINARY ---
 cloudinary.config({
   cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
   api_key: process.env.CLOUDINARY_API_KEY,
@@ -24,10 +25,8 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- CONFIGURACIÓN DE RESEND ---
 const resend = new Resend('re_PhirtQEh_6B4Hf96RvoMT6LVBeWjNT4Sa');
 
-// --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: {
@@ -35,26 +34,20 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   }
 });
 
-// --- MODELO DE PRODUCTO ACTUALIZADO ---
 const Product = sequelize.define('Product', {
   name: { type: DataTypes.STRING, allowNull: false },
   factoryPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   imageUrl: { type: DataTypes.STRING, allowNull: false },
-  description: { type: DataTypes.TEXT, allowNull: true }, // 🚀 Nueva columna para acceso total
-  weightKg: {
-    type: DataTypes.DECIMAL(10, 2),
-    allowNull: true,
-    defaultValue: 0.00
-  }
+  description: { type: DataTypes.TEXT, allowNull: true },
+  sellerEmail: { type: DataTypes.STRING, allowNull: false } // 🚀 Requerido
 });
 
-sequelize.sync({ alter: true }) // 'alter: true' actualiza la tabla si agregas columnas
-  .then(() => console.log('✅ Base de datos sincronizada correctamente'))
-  .catch(err => console.error('❌ Error al sincronizar la base de datos:', err));
+sequelize.sync({ alter: true }) 
+  .then(() => console.log('✅ Base de datos sincronizada'))
+  .catch(err => console.error('❌ Error DB:', err));
 
-// --- RUTAS DE LA API ---
+// --- RUTAS ---
 
-// Obtener productos
 app.get('/api/products', async (req, res) => {
   try {
     const products = await Product.findAll({ order: [['createdAt', 'DESC']] });
@@ -64,23 +57,25 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// Crear producto (Insertar con imagen desde el celular)
+// 🚀 2. RUTA CORREGIDA: Ahora sí guarda el sellerEmail del Marketplace
 app.post('/api/products', upload.single('image'), async (req, res) => {
   try {
+    const { name, factoryPrice, description, sellerEmail } = req.body; // Extraemos sellerEmail
+    
     const newProduct = await Product.create({
-      name: req.body.name,
-      factoryPrice: req.body.factoryPrice,
-      description: req.body.description, // Soporte para descripción
+      name,
+      factoryPrice,
+      description,
+      sellerEmail: sellerEmail || 'admin@aling.com', // Backup por si falla el front
       imageUrl: req.file ? req.file.path : 'https://via.placeholder.com/300'
     });
     res.status(201).json(newProduct);
   } catch (error) {
-    console.error('❌ Error al crear producto:', error);
-    res.status(500).json({ error: 'Error interno al crear producto' });
+    console.error('❌ Error en POST /api/products:', error);
+    res.status(500).json({ error: 'Faltan datos obligatorios o error de servidor' });
   }
 });
 
-// Actualizar producto (Acceso total: Nombre, Precio, Descripción e Imagen)
 app.put('/api/products/:id', upload.single('image'), async (req, res) => {
   try {
     const { name, factoryPrice, description } = req.body;
@@ -89,36 +84,34 @@ app.put('/api/products/:id', upload.single('image'), async (req, res) => {
       factoryPrice: parseFloat(factoryPrice),
       description
     };
-
-    // Si el admin selecciona una nueva imagen desde los archivos del celular
-    if (req.file) {
-      updateData.imageUrl = req.file.path;
-    }
+    if (req.file) updateData.imageUrl = req.file.path;
 
     await Product.update(updateData, { where: { id: req.params.id } });
-    res.json({ message: 'Producto actualizado con éxito' });
+    res.json({ message: 'Actualizado' });
   } catch (error) {
-    console.error('❌ Error al actualizar:', error);
-    res.status(500).json({ error: 'Error al actualizar el producto' });
+    res.status(500).json({ error: 'Error al actualizar' });
   }
 });
 
-// Eliminar producto
 app.delete('/api/products/:id', async (req, res) => {
   try {
     await Product.destroy({ where: { id: req.params.id } });
-    res.json({ message: 'Producto eliminado con éxito' });
+    res.json({ message: 'Eliminado' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al eliminar el producto' });
+    res.status(500).json({ error: 'Error al eliminar' });
   }
 });
 
-// --- CHECKOUT Y ENVÍO DE FACTURA ---
+// 🚀 3. CHECKOUT ROBUSTO (Resuelve el error del botón naranja)
 app.post('/api/checkout', async (req, res) => {
   const { email, totalAmount, address } = req.body; 
 
+  if (!email || !totalAmount) {
+    return res.status(400).json({ error: 'Faltan datos para procesar el pago' });
+  }
+
   try {
-    const data = await resend.emails.send({
+    await resend.emails.send({
       from: 'Aling Mayorista <onboarding@resend.dev>',
       to: email,
       subject: '📦 Confirmación de Pedido - Aling Mayorista',
@@ -128,21 +121,20 @@ app.post('/api/checkout', async (req, res) => {
             <h1>ALING MAYORISTA</h1>
           </div>
           <div style="padding: 30px;">
-            <h2>Resumen de tu pedido</h2>
-            <p><strong>Usuario:</strong> ${email}</p>
-            <p><strong>Dirección de Entrega:</strong> ${address || 'Retiro en local'}</p>
+            <h2>¡Hola! Hemos recibido tu pedido.</h2>
+            <p><strong>Comprador:</strong> ${email}</p>
+            <p><strong>Dirección de Entrega:</strong> ${address}</p>
             <hr style="border: none; border-top: 1px solid #eee;">
-            <p style="font-size: 20px; color: #ff5722;"><strong>Total: $${totalAmount}</strong></p>
-          </div>
-          <div style="background-color: #f4f4f4; padding: 10px; text-align: center; font-size: 12px; color: #999;">
-            Santo Domingo, Ecuador
+            <p style="font-size: 20px; color: #ff5722;"><strong>Total a Pagar: $${totalAmount}</strong></p>
+            <p style="font-size: 12px; color: #666;">Pronto un vendedor se pondrá en contacto contigo.</p>
           </div>
         </div>
       `,
     });
-    res.status(200).json({ message: 'Pedido procesado' });
+    res.status(200).json({ message: 'Factura enviada' });
   } catch (error) {
-    res.status(500).json({ error: 'Error al enviar factura' });
+    console.error("Error Resend:", error);
+    res.status(500).json({ error: 'Error al enviar el correo' });
   }
 });
 
