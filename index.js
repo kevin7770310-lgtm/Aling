@@ -5,7 +5,7 @@ const { Sequelize, DataTypes } = require('sequelize');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend'); // 🚀 Cambio a Resend
 
 const app = express();
 app.use(cors());
@@ -24,14 +24,9 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
-const transporter = nodemailer.createTransport({
-  service: 'gmail',
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
-  }
-});
+// --- CONFIGURACIÓN DE RESEND (REEMPLAZA A NODEMAILER) ---
+// Usamos directamente tu llave para asegurar el funcionamiento inmediato
+const resend = new Resend('re_PhirtQEh_6B4Hf96RvoMT6LVBeWjNT4Sa'); 
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
@@ -46,7 +41,6 @@ const Product = sequelize.define('Product', {
   name: { type: DataTypes.STRING, allowNull: false },
   factoryPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   imageUrl: { type: DataTypes.STRING, allowNull: false },
-  // Mantenemos weightKg para compatibilidad con tu DB actual
   weightKg: { 
     type: DataTypes.DECIMAL(10, 2), 
     allowNull: true, 
@@ -54,7 +48,6 @@ const Product = sequelize.define('Product', {
   }
 });
 
-// Sincronización estándar (Segura para producción)
 sequelize.sync()
   .then(() => console.log('✅ Base de datos sincronizada correctamente'))
   .catch(err => console.error('❌ Error al sincronizar la base de datos:', err));
@@ -110,23 +103,36 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// Checkout y envío de correo
+// --- CHECKOUT Y ENVÍO DE FACTURA CON RESEND ---
 app.post('/api/checkout', async (req, res) => {
   const { email, totalAmount } = req.body;
-  try {
-    const mailOptions = {
-      from: `"Aling Mayorista" <${process.env.EMAIL_USER}>`,
-      to: email,
-      subject: 'Factura de Compra - Aling Mayorista',
-      html: `<h1>¡Gracias por tu compra!</h1><p>Total: <b>$${totalAmount}</b></p>`
-    };
+  console.log(`📩 Intentando enviar factura a: ${email}`);
 
-    await transporter.sendMail(mailOptions);
-    return res.status(200).json({ message: 'Pedido exitoso' });
+  try {
+    // 🚀 Resend utiliza HTTPS (Puerto 443), por lo que Render no lo bloquea
+    const data = await resend.emails.send({
+      from: 'Aling Mayorista <onboarding@resend.dev>',
+      to: email, // kevin7770310@gmail.com
+      subject: 'Confirmación de Pedido - Aling Mayorista',
+      html: `
+        <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
+          <h2 style="color: #ff5722;">¡Gracias por tu compra!</h2>
+          <p>Hola, hemos recibido tu pedido en <strong>Aling Mayorista</strong>.</p>
+          <hr style="border: none; border-top: 1px solid #eee;" />
+          <p style="font-size: 18px;"><strong>Total a pagar: $${totalAmount}</strong></p>
+          <hr style="border: none; border-top: 1px solid #eee;" />
+          <p style="font-size: 12px; color: #888;">Este es un correo automático, por favor no respondas a este mensaje.</p>
+        </div>
+      `,
+    });
+
+    console.log("✅ Factura enviada vía Resend:", data);
+    return res.status(200).json({ message: 'Pedido exitoso y factura enviada' });
+
   } catch (error) {
-    console.error("❌ Error enviando factura:", error);
-    // 🚀 Esto evita el "Cargando" infinito en Flutter
-    return res.status(500).json({ error: 'No se pudo enviar la factura' });
+    console.error("❌ Error crítico en el checkout (Resend):", error);
+    // Respondemos con JSON para que Flutter pueda mostrar el error y no se quede cargando
+    return res.status(500).json({ error: 'Error al procesar el envío de la factura' });
   }
 });
 
