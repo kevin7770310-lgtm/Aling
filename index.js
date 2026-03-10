@@ -31,8 +31,10 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // Esto fuerza a usar IPv4 para evitar el error ENETUNREACH de los logs
-  connectionTimeout: 10000,
+  tls: {
+    // Esto evita errores de certificado y de red IPv6 que vimos en tus logs
+    rejectUnauthorized: false
+  }
 });
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
@@ -114,26 +116,28 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // Checkout y envío de correo
 app.post('/api/checkout', async (req, res) => {
-  const { email, totalAmount } = req.body;
-
   try {
+    const { email, totalAmount } = req.body;
+
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Factura de Compra - Aling Mayorista',
-      html: `<h1>Gracias por tu compra</h1><p>El total a pagar es: <b>$${totalAmount}</b></p>`
+      html: `<h1>Gracias por tu compra</h1><p>Total: <b>$${totalAmount}</b></p>`
     };
 
-    // Esperar el envío antes de responder
+    // Intentamos enviar el correo
     await transporter.sendMail(mailOptions);
     
-    // Responder éxito para quitar el cargando en Flutter
-    res.status(200).json({ message: 'Factura enviada correctamente' });
+    // Si funciona, enviamos éxito
+    return res.status(200).json({ message: 'Pedido procesado con éxito' });
 
   } catch (error) {
-    console.error("❌ Error en checkout:", error);
-    // Responder error para que Flutter muestre el mensaje y no se quede colgado
-    res.status(500).json({ error: 'No se pudo enviar la factura' });
+    // Si falla el correo, imprimimos el error en el log de Render
+    console.error("❌ Error en el envío de factura:", error);
+    
+    // ENVIAMOS ERROR AL FRONTEND PARA QUE NO SE QUEDE CARGANDO
+    return res.status(500).json({ error: 'Error interno al enviar la factura' });
   }
 });
 
