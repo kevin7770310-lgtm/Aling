@@ -5,7 +5,7 @@ const { Sequelize, DataTypes } = require('sequelize');
 const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
-const { Resend } = require('resend'); // 🚀 Cambio a Resend
+const { Resend } = require('resend');
 
 const app = express();
 app.use(cors());
@@ -24,8 +24,7 @@ const storage = new CloudinaryStorage({
 });
 const upload = multer({ storage: storage });
 
-// --- CONFIGURACIÓN DE RESEND (REEMPLAZA A NODEMAILER) ---
-// Usamos directamente tu llave para asegurar el funcionamiento inmediato
+// --- CONFIGURACIÓN DE RESEND ---
 const resend = new Resend('re_PhirtQEh_6B4Hf96RvoMT6LVBeWjNT4Sa');
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
@@ -36,11 +35,12 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   }
 });
 
-// --- MODELO DE PRODUCTO ---
+// --- MODELO DE PRODUCTO ACTUALIZADO ---
 const Product = sequelize.define('Product', {
   name: { type: DataTypes.STRING, allowNull: false },
   factoryPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   imageUrl: { type: DataTypes.STRING, allowNull: false },
+  description: { type: DataTypes.TEXT, allowNull: true }, // 🚀 Nueva columna para acceso total
   weightKg: {
     type: DataTypes.DECIMAL(10, 2),
     allowNull: true,
@@ -48,7 +48,7 @@ const Product = sequelize.define('Product', {
   }
 });
 
-sequelize.sync()
+sequelize.sync({ alter: true }) // 'alter: true' actualiza la tabla si agregas columnas
   .then(() => console.log('✅ Base de datos sincronizada correctamente'))
   .catch(err => console.error('❌ Error al sincronizar la base de datos:', err));
 
@@ -64,13 +64,14 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// Crear producto
+// Crear producto (Insertar con imagen desde el celular)
 app.post('/api/products', upload.single('image'), async (req, res) => {
   try {
     const newProduct = await Product.create({
       name: req.body.name,
       factoryPrice: req.body.factoryPrice,
-      imageUrl: req.file.path
+      description: req.body.description, // Soporte para descripción
+      imageUrl: req.file ? req.file.path : 'https://via.placeholder.com/300'
     });
     res.status(201).json(newProduct);
   } catch (error) {
@@ -79,16 +80,25 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
   }
 });
 
-// Actualizar producto
-app.put('/api/products/:id', async (req, res) => {
+// Actualizar producto (Acceso total: Nombre, Precio, Descripción e Imagen)
+app.put('/api/products/:id', upload.single('image'), async (req, res) => {
   try {
-    const { name, factoryPrice } = req.body;
-    await Product.update(
-      { name, factoryPrice: parseFloat(factoryPrice) },
-      { where: { id: req.params.id } }
-    );
+    const { name, factoryPrice, description } = req.body;
+    const updateData = {
+      name,
+      factoryPrice: parseFloat(factoryPrice),
+      description
+    };
+
+    // Si el admin selecciona una nueva imagen desde los archivos del celular
+    if (req.file) {
+      updateData.imageUrl = req.file.path;
+    }
+
+    await Product.update(updateData, { where: { id: req.params.id } });
     res.json({ message: 'Producto actualizado con éxito' });
   } catch (error) {
+    console.error('❌ Error al actualizar:', error);
     res.status(500).json({ error: 'Error al actualizar el producto' });
   }
 });
@@ -103,69 +113,39 @@ app.delete('/api/products/:id', async (req, res) => {
   }
 });
 
-// --- CHECKOUT Y ENVÍO DE FACTURA CON RESEND ---
+// --- CHECKOUT Y ENVÍO DE FACTURA ---
 app.post('/api/checkout', async (req, res) => {
-  const { email, totalAmount } = req.body;
-  console.log(`📩 Intentando enviar factura a: ${email}`);
+  const { email, totalAmount, address } = req.body; 
 
   try {
-    // 🚀 Resend utiliza HTTPS (Puerto 443), por lo que Render no lo bloquea
     const data = await resend.emails.send({
       from: 'Aling Mayorista <onboarding@resend.dev>',
       to: email,
       subject: '📦 Confirmación de Pedido - Aling Mayorista',
       html: `
-    <div style="max-width: 600px; margin: auto; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.05);">
-      <div style="background-color: #ff5722; padding: 30px; text-align: center;">
-        <h1 style="color: white; margin: 0; font-size: 24px; letter-spacing: 1px;">ALING MAYORISTA</h1>
-        <p style="color: #ffe0b2; margin: 5px 0 0 0;">Distribución Directa</p>
-      </div>
-      
-      <div style="padding: 30px; background-color: #ffffff;">
-        <h2 style="color: #333; margin-top: 0;">¡Gracias por tu preferencia, Kevin!</h2>
-        <p style="color: #666; line-height: 1.5;">Hemos recibido tu pedido correctamente. A continuación, te presentamos el resumen de tu compra realizada desde <strong>Santo Domingo de los Colorados</strong>.</p>
-        
-        <div style="background-color: #f9f9f9; border-radius: 8px; padding: 20px; margin: 20px 0; border-left: 5px solid #ff5722;">
-          <table style="width: 100%; border-collapse: collapse;">
-            <tr>
-              <td style="padding: 10px 0; color: #555;"><strong>Estado:</strong></td>
-              <td style="padding: 10px 0; text-align: right; color: #4caf50;"><strong>Confirmado</strong></td>
-            </tr>
-            <tr>
-              <td style="padding: 10px 0; color: #555;"><strong>Fecha:</strong></td>
-              <td style="padding: 10px 0; text-align: right; color: #555;">${new Date().toLocaleDateString()}</td>
-            </tr>
-            <tr style="border-top: 1px solid #eee;">
-              <td style="padding: 15px 0; font-size: 18px; color: #333;"><strong>Total Pagado:</strong></td>
-              <td style="padding: 15px 0; text-align: right; font-size: 22px; color: #ff5722;"><strong>$${totalAmount}</strong></td>
-            </tr>
-          </table>
+        <div style="max-width: 600px; margin: auto; font-family: sans-serif; border: 1px solid #e0e0e0; border-radius: 12px; overflow: hidden;">
+          <div style="background-color: #ff5722; padding: 20px; text-align: center; color: white;">
+            <h1>ALING MAYORISTA</h1>
+          </div>
+          <div style="padding: 30px;">
+            <h2>Resumen de tu pedido</h2>
+            <p><strong>Usuario:</strong> ${email}</p>
+            <p><strong>Dirección de Entrega:</strong> ${address || 'Retiro en local'}</p>
+            <hr style="border: none; border-top: 1px solid #eee;">
+            <p style="font-size: 20px; color: #ff5722;"><strong>Total: $${totalAmount}</strong></p>
+          </div>
+          <div style="background-color: #f4f4f4; padding: 10px; text-align: center; font-size: 12px; color: #999;">
+            Santo Domingo, Ecuador
+          </div>
         </div>
-
-        <p style="color: #666; font-size: 14px; text-align: center; margin-top: 30px;">
-          Si tienes alguna duda sobre tu despacho, contáctanos respondiendo a este correo.
-        </p>
-      </div>
-      
-      <div style="background-color: #f4f4f4; padding: 20px; text-align: center; font-size: 12px; color: #999;">
-        <p style="margin: 0;">© 2026 Aling Mayorista - Software Engineering Thesis Project</p>
-        <p style="margin: 5px 0 0 0;">Santo Domingo, Ecuador</p>
-      </div>
-    </div>
-  `,
+      `,
     });
-
-    console.log("✅ Factura enviada vía Resend:", data);
-    return res.status(200).json({ message: 'Pedido exitoso y factura enviada' });
-
+    res.status(200).json({ message: 'Pedido procesado' });
   } catch (error) {
-    console.error("❌ Error crítico en el checkout (Resend):", error);
-    // Respondemos con JSON para que Flutter pueda mostrar el error y no se quede cargando
-    return res.status(500).json({ error: 'Error al procesar el envío de la factura' });
+    res.status(500).json({ error: 'Error al enviar factura' });
   }
 });
 
-// --- INICIAR SERVIDOR ---
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Servidor listo en el puerto ${PORT}`);
