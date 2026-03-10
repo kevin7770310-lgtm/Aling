@@ -35,7 +35,8 @@ const Product = sequelize.define('Product', {
   factoryPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   imageUrl: { type: DataTypes.STRING, allowNull: false },
   description: { type: DataTypes.TEXT, allowNull: true },
-  sellerEmail: { type: DataTypes.STRING, allowNull: true } // 🚀 Cambiado a true para evitar el Error 500
+  sellerEmail: { type: DataTypes.STRING, allowNull: true },
+  category: { type: DataTypes.STRING, defaultValue: 'Otros' } // 🚀 NUEVO CAMPO
 });
 
 // ⚠️ ATENCIÓN KEVIN: 
