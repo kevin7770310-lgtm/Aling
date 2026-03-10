@@ -26,20 +26,13 @@ const upload = multer({ storage: storage });
 
 // --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-  // 💡 ESTO OBLIGA A USAR IPV4 Y EVITA EL "ENETUNREACH"
+  // Esto fuerza a usar IPv4 para evitar el error ENETUNREACH de los logs
   connectionTimeout: 10000,
-  greetingTimeout: 10000,
-  socketTimeout: 10000,
-  dnsTimeout: 10000,
-  // Forzar IPv4
-  family: 4 
 });
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
@@ -121,26 +114,26 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // Checkout y envío de correo
 app.post('/api/checkout', async (req, res) => {
-  try {
-    const { email, totalAmount } = req.body;
+  const { email, totalAmount } = req.body;
 
+  try {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: email,
       subject: 'Factura de Compra - Aling Mayorista',
-      text: `Gracias por tu compra. Total: $${totalAmount}`
+      html: `<h1>Gracias por tu compra</h1><p>El total a pagar es: <b>$${totalAmount}</b></p>`
     };
 
-    // Usar await para que el servidor espere el resultado antes de responder
+    // Esperar el envío antes de responder
     await transporter.sendMail(mailOptions);
     
-    // 🚀 ESTO QUITA EL "CARGANDO" EN FLUTTER
-    return res.status(200).json({ message: 'Pedido exitoso y correo enviado' });
+    // Responder éxito para quitar el cargando en Flutter
+    res.status(200).json({ message: 'Factura enviada correctamente' });
 
   } catch (error) {
-    console.error("❌ Error enviando correo:", error);
-    // 🚀 ESTO MUESTRA EL ERROR EN FLUTTER EN LUGAR DE QUEDARSE CARGANDO
-    return res.status(500).json({ error: 'Error al procesar el envío de factura' });
+    console.error("❌ Error en checkout:", error);
+    // Responder error para que Flutter muestre el mensaje y no se quede colgado
+    res.status(500).json({ error: 'No se pudo enviar la factura' });
   }
 });
 
