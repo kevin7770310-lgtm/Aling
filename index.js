@@ -26,18 +26,11 @@ const upload = multer({ storage: storage });
 
 // --- CONFIGURACIÓN DE CORREOS (PLAN DE RESCATE FINAL) ---
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true, // true para puerto 465
+  service: 'gmail',
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
-  },
-  // 🚀 ESTO ELIMINA EL ERROR ENETUNREACH AL FORZAR IPV4
-  family: 4, 
-  connectionTimeout: 20000,
-  greetingTimeout: 20000,
-  socketTimeout: 20000,
+  }
 });
 
 // --- CONEXIÓN A LA BASE DE DATOS (NEON) ---
