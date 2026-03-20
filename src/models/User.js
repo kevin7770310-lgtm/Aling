@@ -14,7 +14,11 @@ const User = sequelize.define('User', {
   role: {
     type: DataTypes.STRING,
     defaultValue: 'client', // Por defecto todos son clientes. Luego crearemos tu admin.
-  }
+  },
+  fcmToken: {
+  type: DataTypes.STRING,
+  allowNull: true
+}
 });
 
 module.exports = User;

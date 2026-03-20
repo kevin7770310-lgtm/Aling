@@ -6,6 +6,7 @@ const cloudinary = require('cloudinary').v2;
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const multer = require('multer');
 const { Resend } = require('resend');
+const admin = require('./firebaseconfig'); // Importamos la configuración de Firebase
 
 const app = express();
 app.use(cors());
@@ -32,16 +33,24 @@ const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
 });
 
+// --- MODELOS ---
 const Product = sequelize.define('Product', {
   name: { type: DataTypes.STRING, allowNull: false },
   factoryPrice: { type: DataTypes.DECIMAL(10, 2), allowNull: false },
   imageUrl: { type: DataTypes.STRING, allowNull: false },
   description: { type: DataTypes.TEXT, allowNull: true },
   sellerEmail: { type: DataTypes.STRING, allowNull: true },
-  category: { type: DataTypes.STRING, defaultValue: 'Otros' } 
+  sellerPhone: { type: DataTypes.STRING, allowNull: true },
+  category: { type: DataTypes.STRING, defaultValue: 'Otros' }
 });
 
-sequelize.sync({ alter: true }) 
+const User = sequelize.define('User', {
+  email: { type: DataTypes.STRING, allowNull: false, unique: true },
+  fcmToken: { type: DataTypes.STRING, allowNull: true }
+});
+
+// Sincronización automática (añade columnas o tablas nuevas si faltan)
+sequelize.sync({ alter: true })
   .then(() => console.log('✅ Base de datos sincronizada'))
   .catch(err => console.error('❌ Error DB:', err));
 
@@ -57,16 +66,17 @@ app.get('/api/products', async (req, res) => {
   }
 });
 
-// 2. Crear producto (Marketplace)
+// 2. Crear producto
 app.post('/api/products', upload.single('image'), async (req, res) => {
   try {
-    const { name, factoryPrice, description, sellerEmail, category } = req.body;
+    const { name, factoryPrice, description, sellerEmail, sellerPhone, category } = req.body;
     const newProduct = await Product.create({
       name,
       factoryPrice,
       description,
       category: category || 'Otros',
       sellerEmail: sellerEmail || 'admin@aling.com',
+      sellerPhone: sellerPhone || '593982822157',
       imageUrl: req.file ? req.file.path : 'https://via.placeholder.com/300'
     });
     res.status(201).json(newProduct);
@@ -76,29 +86,22 @@ app.post('/api/products', upload.single('image'), async (req, res) => {
   }
 });
 
-// 3. Actualizar producto (CON CATEGORÍA Y FIX 404)
+// 3. Actualizar producto
 app.put('/api/products/:id', async (req, res) => {
   try {
-    const { name, factoryPrice, description, category } = req.body;
-    
-    // Buscamos si el producto existe
+    const { name, factoryPrice, description, category, sellerPhone } = req.body;
     const product = await Product.findByPk(req.params.id);
-    
-    if (!product) {
-      return res.status(404).json({ error: 'Producto no encontrado' });
-    }
+    if (!product) return res.status(404).json({ error: 'Producto no encontrado' });
 
-    // Actualizamos los campos
     await product.update({
       name: name || product.name,
       factoryPrice: factoryPrice || product.factoryPrice,
       description: description || product.description,
-      category: category || product.category // 🚀 IMPORTANTE: Actualiza la categoría
+      category: category || product.category,
+      sellerPhone: sellerPhone || product.sellerPhone
     });
-
     res.json({ message: '✅ Producto actualizado con éxito', product });
   } catch (error) {
-    console.error('❌ Error al actualizar:', error);
     res.status(500).json({ error: 'Error interno al actualizar' });
   }
 });
@@ -107,11 +110,7 @@ app.put('/api/products/:id', async (req, res) => {
 app.delete('/api/products/:id', async (req, res) => {
   try {
     const deleted = await Product.destroy({ where: { id: req.params.id } });
-    if (deleted) {
-      res.json({ message: 'Eliminado correctamente' });
-    } else {
-      res.status(404).json({ error: 'No encontrado' });
-    }
+    res.json(deleted ? { message: 'Eliminado' } : { error: 'No encontrado' });
   } catch (error) {
     res.status(500).json({ error: 'Error al eliminar' });
   }
@@ -119,7 +118,7 @@ app.delete('/api/products/:id', async (req, res) => {
 
 // 5. Checkout y Factura
 app.post('/api/checkout', async (req, res) => {
-  const { email, totalAmount, address } = req.body; 
+  const { email, totalAmount, address } = req.body;
   try {
     await resend.emails.send({
       from: 'Aling Mayorista <onboarding@resend.dev>',
@@ -132,6 +131,39 @@ app.post('/api/checkout', async (req, res) => {
     res.status(500).json({ error: 'Error al enviar factura' });
   }
 });
+
+// 6. Sincronizar Token de Firebase (NUEVO)
+app.post('/api/users/update-token', async (req, res) => {
+  try {
+    const { email, fcmToken } = req.body;
+    const [user, created] = await User.findOrCreate({
+      where: { email: email },
+      defaults: { fcmToken: fcmToken }
+    });
+    if (!created) await user.update({ fcmToken });
+    res.json({ message: '✅ Token sincronizado' });
+  } catch (error) {
+    console.error('Error token:', error);
+    res.status(500).json({ error: 'Error interno' });
+  }
+});
+
+// --- LÓGICA DE NOTIFICACIONES ---
+const enviarNotificacionInteres = async (vendedorToken, nombreProducto) => {
+  const mensaje = {
+    notification: {
+      title: '¡Nuevo interesado!',
+      body: `Alguien quiere saber más sobre tu producto: ${nombreProducto}`,
+    },
+    token: vendedorToken,
+  };
+  try {
+    await admin.messaging().send(mensaje);
+    console.log('Notificación enviada con éxito');
+  } catch (error) {
+    console.error('Error enviando notificación:', error);
+  }
+};
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`🚀 Servidor Aling corriendo en puerto ${PORT}`));
