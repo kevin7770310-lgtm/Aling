@@ -28,6 +28,7 @@ const upload = multer({ storage: storage });
 const resend = new Resend('re_PhirtQEh_6B4Hf96RvoMT6LVBeWjNT4Sa');
 
 // --- CONEXIÓN A LA BASE DE DATOS ---
+console.log("La URL que lee Node es:", process.env.DATABASE_URL);
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
   dialectOptions: { ssl: { require: true, rejectUnauthorized: false } }
